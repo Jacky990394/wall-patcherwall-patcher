@@ -6,8 +6,22 @@
     <title>補漏水工人 (Wall Patcher)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; user-select: none; font-family: system-ui, -apple-system, sans-serif; }
-        canvas { display: block; touch-action: none; }
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            height: 100dvh; /* 動態偵測手機真實可視高度，扣除網址列不超界 */
+            overflow: hidden; 
+            background-color: #111; 
+            user-select: none; 
+            -webkit-user-select: none;
+            touch-action: none;
+            font-family: system-ui, -apple-system, sans-serif; 
+            position: fixed; /* 徹底鎖死畫面邊界，防止任何滑動與超出 */
+            inset: 0;
+        }
+        canvas { display: block; touch-action: none; width: 100%; height: 100%; }
         /* 強制定義 hidden，確保在任何環境或無網路快取下都能正常切換畫面 */
         .hidden { display: none !important; }
     </style>
@@ -47,14 +61,14 @@
             <div class="text-xs md:text-sm text-gray-300 mb-6 space-y-2 text-left w-full leading-relaxed bg-gray-900 p-4 rounded-lg box-border">
                 <p>🛠️ 牆壁正在漏水！裂縫會隨時間越來越大！</p>
                 <p>🎯 跑到破洞旁並<b>長按發射</b>黏膠補洞，洞縮小至消失即修復。</p>
-                <p class="text-emerald-400">🪣 <b>注意！</b> 發泡膠有限，用完請跑去靠近【左下、右下、上方的材料桶】自動補充！</p>
+                <p class="text-emerald-400">🪣 <b>補給：</b>靠近【3處材料桶】補膠，或拾取隨機出現的<b class="text-cyan-300">【能量水瓶 🍼】</b>瞬間補滿！</p>
                 <p>💀 漏水會讓右上角的淹水指標上升，超過 <span class="text-red-400 font-bold">100%</span> 則系統短路 Game Over。</p>
                 <hr class="border-gray-700 my-2">
                 <p class="text-yellow-300 font-bold">🎮 控制方式：</p>
                 <ul class="list-disc pl-5 text-gray-300 space-y-1">
                     <li><b>鍵盤</b>：[方向鍵/WASD] 移動，[空白鍵] 發射，[Shift] 衝刺</li>
                     <li><b>搖桿</b>：[十字鍵/左香菇頭] 移動，[任意鍵] 發射，[L1/R1] 衝刺</li>
-                    <li><b>手機/平板</b>：螢幕左下角虛擬搖桿移動，右下角按鈕發射與衝刺</li>
+                    <li><b>手機/平板</b>：直接<b>觸碰/滑動螢幕任意處</b>導引工人移動，<b>連點兩下螢幕</b>衝刺，右下角按鈕發射</li>
                 </ul>
             </div>
 
@@ -69,34 +83,16 @@
         </div>
     </div>
 
-    <!-- 遊戲結束畫面 -->
+    <!-- 遊戲結束畫面 (已移除跳動特效 animate-bounce) -->
     <div id="gameOverScreen" class="absolute inset-0 flex items-center justify-center z-30 bg-red-900/90 backdrop-blur-md hidden p-4 box-border">
-        <div class="bg-black/85 border-4 border-red-500 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform scale-100 animate-bounce box-border">
+        <div class="bg-black/85 border-4 border-red-500 p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform scale-100 box-border">
             <h1 class="text-4xl md:text-5xl font-black text-red-500 mb-4 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">淹水啦！</h1>
             <p class="text-xl md:text-2xl text-yellow-400 mb-2 font-bold">最終分數: <span id="finalScoreDisplay" class="text-3xl md:text-4xl ml-2">0</span></p>
-            <p class="text-lg md:text-xl text-green-400 mb-4 font-bold">最終職稱: <span id="finalRankDisplay" class="text-xl md:text-2xl ml-2">一般新手</span></p>
-            <p id="gameOverMessage" class="text-base md:text-lg text-gray-300 mb-8 italic">地下室全毀，老闆很生氣。</p>
-            <div class="flex gap-4 justify-center">
-                <button id="restart1PBtn" onclick="window.initWallGame('1P')" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-5 md:py-4 md:px-6 rounded-lg cursor-pointer text-base md:text-lg transition-all hover:scale-110 shadow-lg">
-                    單人重新 (1P)
-                </button>
-                <button id="restart2PBtn" onclick="window.initWallGame('2P')" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-5 md:py-4 md:px-6 rounded-lg cursor-pointer text-base md:text-lg transition-all hover:scale-110 shadow-lg">
-                    雙人重新 (2P)
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 虛擬按鍵 (僅在觸控螢幕顯示) -->
+    <!-- 虛擬按鍵 (僅在觸控螢幕顯示：改為僅保留右下角發射鍵) -->
     <div id="touchControls" class="absolute inset-0 pointer-events-none hidden z-10">
-        <!-- 左下：虛擬搖桿底座 -->
-        <div id="joystickBase" class="absolute bottom-6 left-6 w-28 h-28 md:w-32 md:h-32 bg-white/20 rounded-full border-2 border-white/30 backdrop-blur-sm pointer-events-auto flex items-center justify-center select-none">
-            <div id="joystickKnob" class="w-10 h-10 md:w-12 md:h-12 bg-white/50 rounded-full shadow-lg relative"></div>
-        </div>
-        <!-- 右下：操作按鈕 -->
+        <!-- 右下：發射按鈕 -->
         <div class="absolute bottom-6 right-6 flex gap-3 md:gap-4 pointer-events-auto items-end">
-            <button id="touchDashBtn" class="w-16 h-16 md:w-20 md:h-20 bg-blue-500/60 rounded-full text-white font-bold border-2 border-white/40 backdrop-blur-sm active:bg-blue-600/80 select-none text-sm md:text-base shadow-lg">衝刺</button>
-            <button id="touchShootBtn" class="w-20 h-20 md:w-24 md:h-24 bg-yellow-500/60 rounded-full text-black font-black border-2 border-white/40 backdrop-blur-sm active:bg-yellow-600/80 select-none text-base md:text-lg shadow-lg">發射</button>
+            <button id="touchShootBtn" class="w-24 h-24 md:w-28 md:h-28 bg-yellow-500/75 rounded-full text-black font-black border-4 border-white/60 backdrop-blur-sm active:bg-yellow-400 active:scale-95 transition-transform select-none text-lg md:text-xl shadow-[0_0_20px_rgba(234,179,8,0.6)]">長按<br>發射</button>
         </div>
     </div>
 
@@ -118,9 +114,6 @@
         const floodBar = document.getElementById('floodBar');
         const touchControls = document.getElementById('touchControls');
         const touchShootBtn = document.getElementById('touchShootBtn');
-        const touchDashBtn = document.getElementById('touchDashBtn');
-        const joystickBase = document.getElementById('joystickBase');
-        const joystickKnob = document.getElementById('joystickKnob');
 
         // 遊戲狀態
         let gameState = 'START'; 
@@ -134,19 +127,77 @@
         let animationFrameId;
         let lastTime = 0;
 
-        // 難度控制
+        // 難度與生成控制
         let holeSpawnTimer = 0;
         let currentSpawnInterval = 2500; 
         let minSpawnInterval = 600;
         let baseGrowthRate = 4.0; 
         let floodLevel = 0; 
         let shakeTime = 0;
+        let waterBottleSpawnTimer = 0;
 
         // 實體陣列
         let holes = [];
         let particles = []; 
         let foamParticles = [];
         let supplyStations = [];
+        let waterBottles = [];
+
+        // --- 能量水瓶類別 (隨機掉落，喝了瞬間補滿材料) ---
+        class WaterBottle {
+            constructor() {
+                let pad = 80;
+                this.x = Math.random() * (Math.max(100, canvas.width - pad * 2)) + pad;
+                this.y = Math.random() * (Math.max(100, canvas.height - pad * 2)) + pad;
+                this.radius = 22;
+                this.life = 12.0; // 在場上停留 12 秒
+                this.floatTime = Math.random() * Math.PI * 2;
+            }
+            update(deltaTime) {
+                this.life -= deltaTime;
+                this.floatTime += deltaTime * 5;
+            }
+            draw() {
+                ctx.save();
+                // 上下漂浮動畫
+                let offsetY = Math.sin(this.floatTime) * 5;
+                ctx.translate(this.x, this.y + offsetY);
+
+                // 快消失時閃爍提示
+                if (this.life < 3.0 && Math.floor(this.life * 10) % 2 === 0) {
+                    ctx.globalAlpha = 0.35;
+                }
+
+                // 能量光環
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius + 4, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // 瓶身 (亮水藍色)
+                ctx.fillStyle = '#0284C7';
+                ctx.fillRect(-10, -10, 20, 24);
+                ctx.fillStyle = '#38BDF8';
+                ctx.fillRect(-8, -8, 16, 20);
+
+                // 瓶頸與紅色瓶蓋
+                ctx.fillStyle = '#E0F2FE';
+                ctx.fillRect(-5, -15, 10, 5);
+                ctx.fillStyle = '#EF4444';
+                ctx.fillRect(-6, -19, 12, 4);
+
+                // 白色標籤與文字
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(-8, -2, 16, 9);
+                ctx.fillStyle = '#0369A1';
+                ctx.font = '900 9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('滿料', 0, 5);
+
+                ctx.restore();
+            }
+        }
 
         // --- 補給桶類別 (支援 3 處補料) ---
         class SupplyStation {
@@ -205,8 +256,8 @@
             if (supplyStations.length < 3) return;
             let w = canvas.width;
             let h = canvas.height;
-            let offsetX = Math.max(80, w * 0.18);
-            let bottomY = h - 75; 
+            let offsetX = Math.max(65, w * 0.16);
+            let bottomY = h - Math.max(55, h * 0.1); 
             
             supplyStations[0].x = offsetX;
             supplyStations[0].y = bottomY;
@@ -215,70 +266,91 @@
             supplyStations[1].y = bottomY;
             
             supplyStations[2].x = w / 2;
-            supplyStations[2].y = 85; 
+            supplyStations[2].y = Math.max(75, h * 0.12); 
         }
 
-        // --- 視窗縮放處理 ---
+        // --- 視窗縮放處理 (精準偵測實際容器大小，不超出邊界) ---
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            const rect = document.body.getBoundingClientRect();
+            canvas.width = rect.width || window.innerWidth;
+            canvas.height = rect.height || window.innerHeight;
             updateStationPositions();
             drawWallBackground();
         }
         window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
 
-        // --- 觸控與虛擬搖桿邏輯 ---
-        const touchInput = { x: 0, y: 0, shoot: false, dash: false };
+        // --- 觸控移動與雙擊衝刺邏輯 ---
+        const touchInput = { shoot: false, dash: false };
+        const touchTarget = { active: false, x: 0, y: 0, touchId: null };
+        let lastCanvasTapTime = 0;
+
         let isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        
         if (isTouchDevice) {
             touchControls.classList.remove('hidden');
         }
 
-        let joystickCenter = { x: 0, y: 0 };
-        let joystickActive = false;
-
-        joystickBase.addEventListener('touchstart', (e) => {
+        // 點擊或滑動畫面任意處 -> 工人朝該點移動；連點兩下 -> 衝刺
+        canvas.addEventListener('touchstart', (e) => {
+            if (gameState !== 'PLAYING') return;
             e.preventDefault();
-            joystickActive = true;
-            let rect = joystickBase.getBoundingClientRect();
-            joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            updateJoystick(e.touches[0]);
-        }, {passive: false});
-
-        joystickBase.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (joystickActive) updateJoystick(e.touches[0]);
-        }, {passive: false});
-
-        joystickBase.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            joystickActive = false;
-            joystickKnob.style.transform = `translate(0px, 0px)`;
-            touchInput.x = 0;
-            touchInput.y = 0;
-        });
-
-        function updateJoystick(touch) {
-            let dx = touch.clientX - joystickCenter.x;
-            let dy = touch.clientY - joystickCenter.y;
-            let distance = Math.hypot(dx, dy);
-            let maxDist = 35; 
+            const now = performance.now();
             
-            if (distance > maxDist) {
-                dx = (dx / distance) * maxDist;
-                dy = (dy / distance) * maxDist;
+            // 偵測連點兩下 (間隔小於 300 毫秒)
+            if (now - lastCanvasTapTime < 300) {
+                touchInput.dash = true;
             }
-            
-            joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-            touchInput.x = dx / maxDist;
-            touchInput.y = dy / maxDist;
-        }
+            lastCanvasTapTime = now;
 
-        touchShootBtn.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.shoot = true; }, {passive:false});
-        touchShootBtn.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.shoot = false; });
-        touchDashBtn.addEventListener('touchstart', (e) => { e.preventDefault(); touchInput.dash = true; }, {passive:false});
-        touchDashBtn.addEventListener('touchend', (e) => { e.preventDefault(); touchInput.dash = false; });
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                const rect = canvas.getBoundingClientRect();
+                touchTarget.active = true;
+                touchTarget.touchId = t.identifier;
+                touchTarget.x = t.clientX - rect.left;
+                touchTarget.y = t.clientY - rect.top;
+                break;
+            }
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (gameState !== 'PLAYING') return;
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                if (t.identifier === touchTarget.touchId) {
+                    const rect = canvas.getBoundingClientRect();
+                    touchTarget.x = t.clientX - rect.left;
+                    touchTarget.y = t.clientY - rect.top;
+                    break;
+                }
+            }
+        }, {passive: false});
+
+        function endCanvasTouch(e) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                if (t.identifier === touchTarget.touchId) {
+                    touchTarget.active = false;
+                    touchTarget.touchId = null;
+                    break;
+                }
+            }
+        }
+        canvas.addEventListener('touchend', endCanvasTouch);
+        canvas.addEventListener('touchcancel', endCanvasTouch);
+
+        // 右下角發射按鈕事件
+        touchShootBtn.addEventListener('touchstart', (e) => { 
+            e.preventDefault(); 
+            e.stopPropagation(); // 避免誤觸畫布移動
+            touchInput.shoot = true; 
+        }, {passive:false});
+        touchShootBtn.addEventListener('touchend', (e) => { 
+            e.preventDefault(); 
+            e.stopPropagation();
+            touchInput.shoot = false; 
+        });
 
         // --- 輸入控制 (純鍵盤 & 搖桿) ---
         const keys = { up: false, down: false, left: false, right: false, shoot: false, dash: false };
@@ -374,6 +446,7 @@
                 this.maxAmmo = 100;
                 this.ammo = this.maxAmmo;
                 this.showEmptyWarning = false;
+                this.drinkTextTimer = 0;
 
                 this.updateUpgrades(0);
             }
@@ -394,6 +467,7 @@
 
             update(deltaTime, inputX, inputY, isDashing) {
                 let oldX = this.x;
+                if (this.drinkTextTimer > 0) this.drinkTextTimer -= deltaTime;
 
                 if (this.dashCooldown > 0) this.dashCooldown -= deltaTime;
                 if (isDashing && this.dashCooldown <= 0 && !this.isDashing) {
@@ -432,8 +506,13 @@
                 ctx.fillStyle = (this.ammo < this.maxAmmo * 0.3) ? '#EF4444' : '#10B981';
                 ctx.fillRect(-25, -this.height/2 - 22, 50 * (Math.max(0, this.ammo) / this.maxAmmo), 8);
 
-                // 缺膠警告
-                if (this.showEmptyWarning) {
+                // 喝水補滿提示 或 缺膠警告
+                if (this.drinkTextTimer > 0) {
+                    ctx.fillStyle = '#38BDF8';
+                    ctx.font = '900 16px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚡ 能量水補滿！', 0, -this.height/2 - 32);
+                } else if (this.showEmptyWarning) {
                     ctx.fillStyle = '#EF4444';
                     ctx.font = '900 15px sans-serif';
                     ctx.textAlign = 'center';
@@ -618,6 +697,17 @@
             }
         }
 
+        function spawnWaterBottleManager(deltaTime) {
+            waterBottleSpawnTimer += deltaTime;
+            // 每隔約 10 秒，若場上水瓶少於 2 個則隨機生成水瓶
+            if (waterBottleSpawnTimer > 10.0) {
+                if (waterBottles.length < 2) {
+                    waterBottles.push(new WaterBottle());
+                }
+                waterBottleSpawnTimer = 0;
+            }
+        }
+
         function drawWallBackground() {
             ctx.fillStyle = '#4B5563'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -652,12 +742,15 @@
             holes = [];
             particles = [];
             foamParticles = [];
+            waterBottles = [];
             currentSpawnInterval = 2500;
             floodLevel = 0;
             shakeTime = 0;
             holeSpawnTimer = 0;
+            waterBottleSpawnTimer = 0;
             levelUpTextTimer = 0;
             screenFlashTimer = 0; 
+            touchTarget.active = false;
             
             holes.push(new Hole()); 
 
@@ -721,6 +814,29 @@
                 station.draw();
             }
 
+            // 生成與繪製隨機水瓶
+            spawnWaterBottleManager(deltaTime);
+            for (let i = waterBottles.length - 1; i >= 0; i--) {
+                waterBottles[i].update(deltaTime);
+                waterBottles[i].draw();
+                if (waterBottles[i].life <= 0) {
+                    waterBottles.splice(i, 1);
+                }
+            }
+
+            // 繪製觸控目標導引指標 (手機/平板按住螢幕時顯示移動目標)
+            if (touchTarget.active) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(touchTarget.x, touchTarget.y, 18, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+                ctx.fill();
+                ctx.restore();
+            }
+
             for (let i = 0; i < players.length; i++) {
                 let p = players[i];
                 let inputX = 0, inputY = 0;
@@ -732,8 +848,16 @@
                     if (keys.up) inputY -= 1;
                     if (keys.down) inputY += 1;
 
-                    if (touchInput.x !== 0) inputX += touchInput.x;
-                    if (touchInput.y !== 0) inputY += touchInput.y;
+                    // 觸控導引移動：工人自動跑向手指觸碰的位置
+                    if (touchTarget.active) {
+                        let dx = touchTarget.x - p.x;
+                        let dy = touchTarget.y - p.y;
+                        let dist = Math.hypot(dx, dy);
+                        if (dist > 10) { 
+                            inputX += dx / dist;
+                            inputY += dy / dist;
+                        }
+                    }
                     
                     if (gamepadInputs[0].x !== 0) inputX += gamepadInputs[0].x;
                     if (gamepadInputs[0].y !== 0) inputY += gamepadInputs[0].y;
@@ -743,6 +867,7 @@
 
                     isShootingInput = keys.shoot || touchInput.shoot || gamepadInputs[0].shoot;
                     isDashing = keys.dash || touchInput.dash || gamepadInputs[0].dash;
+                    touchInput.dash = false; // 消耗單次雙擊衝刺觸發
                 } else {
                     inputX = gamepadInputs[1].x;
                     inputY = gamepadInputs[1].y;
@@ -762,6 +887,16 @@
                     if (distToBucket < 85) {
                         p.ammo = Math.min(p.maxAmmo, p.ammo + 130 * deltaTime);
                         station.isRefilling = true;
+                    }
+                }
+
+                // 檢查是否喝到隨機水瓶 (瞬間補滿發泡膠)
+                for (let b = waterBottles.length - 1; b >= 0; b--) {
+                    let bottle = waterBottles[b];
+                    if (Math.hypot(p.x - bottle.x, p.y - bottle.y) < 52) {
+                        p.ammo = p.maxAmmo;
+                        p.drinkTextTimer = 1.5;
+                        waterBottles.splice(b, 1);
                     }
                 }
 
