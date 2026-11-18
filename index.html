@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>補漏水工人 (Wall Patcher)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 PeerJS 實現免伺服器跨裝置雙人網路連線 -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- 引入 MQTT.js 透過 WebSockets 實現 100% 穿透防火牆的跨網連線 -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         html, body { 
             margin: 0; 
@@ -148,8 +148,8 @@
         // 遊戲狀態與連線變數
         let gameState = 'START'; 
         let mpRole = 'NONE'; // 'NONE', 'HOST', 'CLIENT'
-        let peer = null;
-        let conn = null;
+        let mqttClient = null;
+        let roomTopic = '';
         let roomCode = '';
         let clientInputData = { x: 0, y: 0, shoot: false, dash: false, touchActive: false, tx: 0, ty: 0 };
         let netSyncTimer = 0;
@@ -821,46 +821,71 @@
             }
         }
 
-        // --- 網路雙人連線 (PeerJS WebRTC) 邏輯 ---
+        // --- 網路雙人連線 (MQTT 雲端高速轉發，100% 不怕防火牆阻擋) ---
+        function cleanupNetwork() {
+            if (mqttClient) {
+                try { mqttClient.end(true); } catch(e) {}
+                mqttClient = null;
+            }
+        }
+
+        function sendNetMsg(obj) {
+            if (mqttClient && mqttClient.connected && roomTopic) {
+                mqttClient.publish(roomTopic, JSON.stringify(obj));
+            }
+        }
+
         window.startSinglePlayer = function() {
-            if (peer) { peer.destroy(); peer = null; }
-            conn = null;
+            cleanupNetwork();
             mpRole = 'NONE';
             onlineBadge.classList.add('hidden');
             window.initWallGame();
         };
 
         window.createOnlineRoom = function() {
-            if (peer) peer.destroy();
+            cleanupNetwork();
             roomCode = Math.floor(1000 + Math.random() * 9000).toString();
-            mpStatusText.classList.remove('hidden');
-            mpStatusText.innerText = '⏳ 正在建立房間...';
+            roomTopic = 'wallpatcher/azhi2026/room/' + roomCode;
+            mpRole = 'HOST';
             
-            peer = new Peer('wallpatcher-azhi-' + roomCode);
-            peer.on('open', () => {
-                mpRole = 'HOST';
-                mpStatusText.innerHTML = `✅ 房間已建立！請另一位玩家輸入房號：<span class="text-2xl text-white bg-blue-600 px-3 py-0.5 rounded ml-1 tracking-widest">${roomCode}</span> 即可自動開始！`;
-            });
-            peer.on('connection', (connection) => {
-                conn = connection;
-                conn.on('open', () => {
-                    onlineBadge.classList.remove('hidden');
-                    window.initWallGame();
+            mpStatusText.classList.remove('hidden');
+            mpStatusText.innerHTML = '⏳ 正在連接雲端大廳...';
+            
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+            
+            mqttClient.on('connect', () => {
+                mqttClient.subscribe(roomTopic, () => {
+                    mpStatusText.innerHTML = `
+                        <div class="bg-blue-950/90 border border-blue-400 p-2.5 rounded-lg mt-1">
+                            ✅ 房間已開啟！請『另一台手機/電腦』輸入房號：
+                            <span class="text-2xl text-yellow-300 font-black bg-black px-3 py-0.5 rounded mx-1 tracking-widest">${roomCode}</span>
+                            <div class="text-xs text-gray-300 mt-1">⚠️ 注意：這台主機請保持在此畫面等待，不要自己在上面按加入喔！</div>
+                        </div>`;
                 });
-                conn.on('data', (data) => {
-                    if (data && data.type === 'INPUT') {
-                        clientInputData = data;
-                    } else if (data && data.type === 'RESTART') {
-                        window.initWallGame();
+            });
+
+            mqttClient.on('message', (topic, message) => {
+                try {
+                    const data = JSON.parse(message.toString());
+                    if (mpRole === 'HOST') {
+                        if (data.type === 'JOIN') {
+                            // 收到 2P 加入訊號，通知 2P 並立即開始遊戲
+                            sendNetMsg({ type: 'START_GAME' });
+                            onlineBadge.classList.remove('hidden');
+                            if (gameState !== 'PLAYING') {
+                                window.initWallGame(true);
+                            }
+                        } else if (data.type === 'INPUT') {
+                            clientInputData = data;
+                        } else if (data.type === 'RESTART') {
+                            window.initWallGame();
+                        }
                     }
-                });
-                conn.on('close', () => {
-                    onlineBadge.classList.add('hidden');
-                    mpRole = 'NONE';
-                });
+                } catch(e) {}
             });
-            peer.on('error', (err) => {
-                mpStatusText.innerText = '⚠️ 房號衝突或網路異常，請再點一次「建立房間」';
+
+            mqttClient.on('error', () => {
+                mpStatusText.innerText = '⚠️ 網路連線異常，請重試';
             });
         };
 
@@ -871,32 +896,56 @@
                 mpStatusText.innerText = '⚠️ 請先在框框內輸入 4 位數字房號！';
                 return;
             }
-            if (peer) peer.destroy();
+            if (mpRole === 'HOST' && code === roomCode) {
+                mpStatusText.classList.remove('hidden');
+                mpStatusText.innerHTML = `<span class="text-red-400">⚠️ 你已經是【${roomCode}】的 1P 主機了！請用『另一支手機或開新分頁』輸入 ${roomCode} 來加入喔！</span>`;
+                return;
+            }
+
+            cleanupNetwork();
+            roomCode = code;
+            roomTopic = 'wallpatcher/azhi2026/room/' + roomCode;
+            mpRole = 'CLIENT';
+
             mpStatusText.classList.remove('hidden');
             mpStatusText.innerText = `⏳ 正在連線至房間 ${code}...`;
 
-            peer = new Peer();
-            peer.on('open', () => {
-                conn = peer.connect('wallpatcher-azhi-' + code);
-                conn.on('open', () => {
-                    mpRole = 'CLIENT';
-                    onlineBadge.classList.remove('hidden');
-                    window.initWallGame();
-                });
-                conn.on('data', (data) => {
-                    if (data && data.type === 'STATE') {
-                        applyNetworkState(data);
-                    } else if (data && data.type === 'RESTART') {
-                        window.initWallGame();
-                    }
-                });
-                conn.on('close', () => {
-                    onlineBadge.classList.add('hidden');
-                    mpRole = 'NONE';
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+            let joinRetryInterval = null;
+
+            mqttClient.on('connect', () => {
+                mqttClient.subscribe(roomTopic, () => {
+                    // 持續發送加入請求，確保主機一定收到
+                    sendNetMsg({ type: 'JOIN' });
+                    joinRetryInterval = setInterval(() => {
+                        if (gameState !== 'PLAYING' && mpRole === 'CLIENT') {
+                            sendNetMsg({ type: 'JOIN' });
+                        } else {
+                            clearInterval(joinRetryInterval);
+                        }
+                    }, 800);
                 });
             });
-            peer.on('error', () => {
-                mpStatusText.innerText = '❌ 找不到該房間，請確認房號是否正確！';
+
+            mqttClient.on('message', (topic, message) => {
+                try {
+                    const data = JSON.parse(message.toString());
+                    if (mpRole === 'CLIENT') {
+                        if (data.type === 'START_GAME' || data.type === 'STATE') {
+                            if (joinRetryInterval) clearInterval(joinRetryInterval);
+                            onlineBadge.classList.remove('hidden');
+                            if (gameState !== 'PLAYING' && data.gameState !== 'GAMEOVER') {
+                                window.initWallGame(true);
+                            }
+                            if (data.type === 'STATE') {
+                                applyNetworkState(data);
+                            }
+                        } else if (data.type === 'RESTART') {
+                            window.initWallGame(true);
+                        }
+                    }
+                } catch(e) {}
             });
         };
 
@@ -961,12 +1010,12 @@
 
         // --- 遊戲流程控制 (支援單人與網路雙人合作) ---
         window.initWallGame = function(fromNetwork) {
-            if (!fromNetwork && mpRole === 'CLIENT' && conn && conn.open) {
-                conn.send({ type: 'RESTART' });
+            if (!fromNetwork && mpRole === 'CLIENT' && mqttClient && mqttClient.connected) {
+                sendNetMsg({ type: 'RESTART' });
                 return;
             }
-            if (!fromNetwork && mpRole === 'HOST' && conn && conn.open) {
-                conn.send({ type: 'RESTART' });
+            if (!fromNetwork && mpRole === 'HOST' && mqttClient && mqttClient.connected) {
+                sendNetMsg({ type: 'RESTART' });
             }
 
             resizeCanvas();
@@ -1099,11 +1148,13 @@
             if (mpRole === 'CLIENT') {
                 let myPlayer = players[1] || players[0];
                 let localIn = getLocalPlayerInput(myPlayer);
-                if (conn && conn.open) {
-                    conn.send({
+                netSyncTimer += deltaTime;
+                if (netSyncTimer >= 0.04 || localIn.dash) {
+                    netSyncTimer = 0;
+                    sendNetMsg({
                         type: 'INPUT',
-                        x: localIn.x,
-                        y: localIn.y,
+                        x: Number(localIn.x.toFixed(2)),
+                        y: Number(localIn.y.toFixed(2)),
                         shoot: localIn.shoot,
                         dash: localIn.dash
                     });
@@ -1412,11 +1463,11 @@
             }
 
             // 若為 1P 主機 (HOST)，即時打包狀態同步給 2P 隊友
-            if (mpRole === 'HOST' && conn && conn.open) {
+            if (mpRole === 'HOST' && mqttClient && mqttClient.connected) {
                 netSyncTimer += deltaTime;
-                if (netSyncTimer >= 0.03 || isOver) { // 每秒同步約 30 次，流暢不卡頓
+                if (netSyncTimer >= 0.045 || isOver) { // 每秒同步約 22 次，高速穩定
                     netSyncTimer = 0;
-                    conn.send({
+                    sendNetMsg({
                         type: 'STATE',
                         gameState: isOver ? 'GAMEOVER' : 'PLAYING',
                         overMsg: isOver ? gameOverMessage.innerText : '',
@@ -1424,11 +1475,11 @@
                         h: canvas.height,
                         score: score,
                         rank: currentRank,
-                        flood: floodLevel,
-                        lvlTimer: levelUpTextTimer,
-                        cemTimer: cementEffectTimer,
-                        flashTimer: screenFlashTimer,
-                        shake: shakeTime,
+                        flood: Number(floodLevel.toFixed(1)),
+                        lvlTimer: Number(levelUpTextTimer.toFixed(1)),
+                        cemTimer: Number(cementEffectTimer.toFixed(1)),
+                        flashTimer: Number(screenFlashTimer.toFixed(1)),
+                        shake: Number(shakeTime.toFixed(1)),
                         players: players.map(p => ({
                             x: Math.round(p.x),
                             y: Math.round(p.y),
@@ -1438,8 +1489,8 @@
                             range: Math.round(p.patchRange),
                             dash: p.isDashing,
                             empty: p.showEmptyWarning,
-                            drink: p.drinkTextTimer,
-                            cement: p.cementTextTimer,
+                            drink: Number(p.drinkTextTimer.toFixed(1)),
+                            cement: Number(p.cementTextTimer.toFixed(1)),
                             shooting: p._netShooting,
                             tx: p._netTx ? Math.round(p._netTx) : null,
                             ty: p._netTy ? Math.round(p._netTy) : null
@@ -1449,7 +1500,7 @@
                             y: Math.round(h.y),
                             r: Number(h.radius.toFixed(1)),
                             v: h.vertices,
-                            ft: h.flashTimer
+                            ft: Number(h.flashTimer.toFixed(2))
                         })),
                         bottles: waterBottles.map(b => ({
                             x: Math.round(b.x),
