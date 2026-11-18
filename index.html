@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>補漏水工人 (Wall Patcher)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 PeerJS 實現免伺服器跨裝置雙人網路連線 -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         html, body { 
             margin: 0; 
@@ -36,6 +38,7 @@
         <div>
             <div class="text-2xl md:text-3xl text-yellow-400 font-black drop-shadow-lg">
                 SCORE: <span id="scoreDisplay">0</span>
+                <span id="onlineBadge" class="hidden ml-2 text-xs md:text-sm bg-blue-600 text-white px-2 py-1 rounded-full align-middle">🌐 雙人連線中</span>
             </div>
             <div class="text-lg md:text-xl text-green-400 font-bold drop-shadow-md mt-1 transition-all duration-300" id="rankContainer">
                 階級: <span id="rankDisplay">一般新手</span>
@@ -52,30 +55,48 @@
         </div>
     </div>
 
-    <!-- 開始畫面 (已移除雙人模式，改為單人立即上工) -->
+    <!-- 開始畫面 (支援單人與跨裝置網路雙人連線) -->
     <div id="startScreen" class="absolute inset-0 flex items-center justify-center z-20 bg-gray-900/95 backdrop-blur-sm p-4 box-border">
-        <div class="bg-gray-800 border-2 border-yellow-500 p-6 md:p-8 rounded-xl shadow-2xl text-center max-w-lg w-full max-h-full overflow-y-auto box-border">
+        <div class="bg-gray-800 border-2 border-yellow-500 p-5 md:p-7 rounded-xl shadow-2xl text-center max-w-lg w-full max-h-full overflow-y-auto box-border">
             <h1 class="text-3xl md:text-5xl font-black text-yellow-500 mb-1 tracking-wider">補漏水工人</h1>
-            <p class="text-gray-400 mb-4 font-bold text-sm md:text-base">Wall Patcher</p>
+            <p class="text-gray-400 mb-3 font-bold text-xs md:text-sm">Wall Patcher Online</p>
             
-            <div class="text-xs md:text-sm text-gray-300 mb-6 space-y-2 text-left w-full leading-relaxed bg-gray-900 p-4 rounded-lg box-border">
+            <div class="text-xs md:text-sm text-gray-300 mb-4 space-y-1.5 text-left w-full leading-relaxed bg-gray-900 p-3.5 rounded-lg box-border">
                 <p>🛠️ 牆壁正在漏水！裂縫會隨時間越來越大！</p>
                 <p>🎯 跑到破洞旁並<b>長按發射</b>黏膠補洞，洞縮小至消失即修復。</p>
-                <p class="text-emerald-400">🪣 <b>補給：</b>靠近【3處材料桶】補膠，或拾取隨機出現的<b class="text-cyan-300">【能量水瓶 🍼】</b>瞬間補滿！</p>
+                <p class="text-emerald-400">🪣 <b>補給：</b>靠近【3處材料桶】補膠，或拾取<b class="text-cyan-300">【能量水瓶 🍼】</b>瞬間補滿！</p>
+                <p class="text-amber-300">🧱 <b>水泥包：</b>隨機出現<b>【強力水泥】</b>，吃到可將全場所有破洞<b>縮小回最小初始狀態</b>！</p>
                 <p>💀 漏水會讓右上角的淹水指標上升，超過 <span class="text-red-400 font-bold">100%</span> 則系統短路 Game Over。</p>
-                <hr class="border-gray-700 my-2">
+                <hr class="border-gray-700 my-1.5">
                 <p class="text-yellow-300 font-bold">🎮 控制方式：</p>
-                <ul class="list-disc pl-5 text-gray-300 space-y-1">
-                    <li><b>鍵盤</b>：[方向鍵/WASD] 移動，[空白鍵] 發射，[Shift] 衝刺</li>
-                    <li><b>搖桿</b>：[十字鍵/左香菇頭] 移動，[任意鍵] 發射，[L1/R1] 衝刺</li>
-                    <li><b>手機/平板</b>：直接<b>觸碰/滑動螢幕任意處</b>導引工人移動，<b>連點兩下螢幕</b>衝刺，右下角按鈕發射</li>
+                <ul class="list-disc pl-5 text-gray-300 space-y-0.5">
+                    <li><b>鍵盤/搖桿</b>：[方向鍵/WASD/香菇頭] 移動，[空白鍵/A鍵] 發射，[Shift/R1] 衝刺</li>
+                    <li><b>手機/平板</b>：<b>觸碰/滑動螢幕任意處</b>導引移動，<b>連點兩下螢幕</b>衝刺，右下角按鈕發射</li>
                 </ul>
             </div>
 
-            <div class="flex justify-center">
-                <button id="startBtn" onclick="window.initWallGame()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-4 px-12 rounded-lg cursor-pointer text-xl transition-transform transform hover:scale-105 shadow-[0_0_20px_rgba(234,179,8,0.6)]">
-                    立即上工 🛠️
+            <!-- 單人開始按鈕 -->
+            <div class="flex justify-center mb-3">
+                <button id="startBtn" onclick="window.startSinglePlayer()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3.5 px-8 rounded-lg cursor-pointer text-xl transition-transform transform hover:scale-105 shadow-[0_0_20px_rgba(234,179,8,0.5)]">
+                    單人立即上工 🛠️
                 </button>
+            </div>
+
+            <!-- 網路雙人連線大廳區塊 -->
+            <div class="bg-gray-900/90 border border-blue-500/60 rounded-lg p-3 text-left">
+                <div class="text-blue-400 font-black text-sm mb-2 text-center">🌐 雙人網路連線合作 (跨手機/平板/電腦)</div>
+                <div id="mpControls" class="flex flex-col sm:flex-row gap-2 justify-between items-center">
+                    <button onclick="window.createOnlineRoom()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-4 rounded-lg cursor-pointer text-sm whitespace-nowrap shadow">
+                        ➕ 建立房間 (當1P主機)
+                    </button>
+                    <div class="flex gap-1.5 w-full sm:w-auto">
+                        <input id="roomCodeInput" type="number" placeholder="輸入4位房號" class="w-full sm:w-28 bg-gray-800 border border-gray-600 rounded-lg px-2.5 py-2 text-white text-center font-bold text-sm focus:outline-none focus:border-blue-400" />
+                        <button onclick="window.joinOnlineRoom()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-lg cursor-pointer text-sm whitespace-nowrap shadow">
+                            加入 (2P)
+                        </button>
+                    </div>
+                </div>
+                <div id="mpStatusText" class="text-amber-300 font-bold text-xs md:text-sm mt-2 text-center hidden"></div>
             </div>
         </div>
     </div>
@@ -120,14 +141,25 @@
         const floodBar = document.getElementById('floodBar');
         const touchControls = document.getElementById('touchControls');
         const touchShootBtn = document.getElementById('touchShootBtn');
+        const onlineBadge = document.getElementById('onlineBadge');
+        const mpStatusText = document.getElementById('mpStatusText');
+        const roomCodeInput = document.getElementById('roomCodeInput');
 
-        // 遊戲狀態
+        // 遊戲狀態與連線變數
         let gameState = 'START'; 
+        let mpRole = 'NONE'; // 'NONE', 'HOST', 'CLIENT'
+        let peer = null;
+        let conn = null;
+        let roomCode = '';
+        let clientInputData = { x: 0, y: 0, shoot: false, dash: false, touchActive: false, tx: 0, ty: 0 };
+        let netSyncTimer = 0;
+
         let score = 0;
         let currentLevel = 0;
         let currentRank = 0;
         const ranks = ["一般新手", "初級工人", "中級技工", "高級師傅", "工地主任", "傳奇工頭", "補漏之神"];
         let levelUpTextTimer = 0;
+        let cementEffectTimer = 0; // 水泥包發動提示計時器
         let screenFlashTimer = 0; 
         let animationFrameId;
         let lastTime = 0;
@@ -140,6 +172,7 @@
         let floodLevel = 0; 
         let shakeTime = 0;
         let waterBottleSpawnTimer = 0;
+        let cementBagSpawnTimer = 0;
 
         // 實體陣列
         let holes = [];
@@ -147,15 +180,69 @@
         let foamParticles = [];
         let supplyStations = [];
         let waterBottles = [];
+        let cementBags = [];
+
+        // --- 強力水泥包類別 (隨機出現，將所有破洞縮回最小初始狀態) ---
+        class CementBag {
+            constructor(x, y, life) {
+                let pad = 85;
+                this.x = x !== undefined ? x : Math.random() * (Math.max(100, canvas.width - pad * 2)) + pad;
+                this.y = y !== undefined ? y : Math.random() * (Math.max(100, canvas.height - pad * 2)) + pad;
+                this.radius = 24;
+                this.life = life !== undefined ? life : 14.0; // 在場上停留 14 秒
+                this.floatTime = Math.random() * Math.PI * 2;
+            }
+            update(deltaTime) {
+                this.life -= deltaTime;
+                this.floatTime += deltaTime * 4;
+            }
+            draw() {
+                ctx.save();
+                let offsetY = Math.sin(this.floatTime) * 4;
+                ctx.translate(this.x, this.y + offsetY);
+
+                if (this.life < 3.0 && Math.floor(this.life * 10) % 2 === 0) {
+                    ctx.globalAlpha = 0.35;
+                }
+
+                // 琥珀色發光外圈
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.9)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius + 5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // 牛皮紙水泥袋身
+                ctx.fillStyle = '#B45309';
+                ctx.fillRect(-16, -18, 32, 36);
+                ctx.fillStyle = '#D97706';
+                ctx.fillRect(-14, -14, 28, 28);
+
+                // 上下封口鋸齒壓線
+                ctx.fillStyle = '#92400E';
+                ctx.fillRect(-16, -18, 32, 4);
+                ctx.fillRect(-16, 14, 32, 4);
+
+                // 中央水泥標籤
+                ctx.fillStyle = '#FEF3C7';
+                ctx.fillRect(-12, -8, 24, 16);
+                ctx.fillStyle = '#B45309';
+                ctx.font = '900 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('水泥', 0, 4);
+
+                ctx.restore();
+            }
+        }
 
         // --- 能量水瓶類別 (隨機掉落，喝了瞬間補滿材料) ---
         class WaterBottle {
-            constructor() {
+            constructor(x, y, life) {
                 let pad = 80;
-                this.x = Math.random() * (Math.max(100, canvas.width - pad * 2)) + pad;
-                this.y = Math.random() * (Math.max(100, canvas.height - pad * 2)) + pad;
+                this.x = x !== undefined ? x : Math.random() * (Math.max(100, canvas.width - pad * 2)) + pad;
+                this.y = y !== undefined ? y : Math.random() * (Math.max(100, canvas.height - pad * 2)) + pad;
                 this.radius = 22;
-                this.life = 12.0; // 在場上停留 12 秒
+                this.life = life !== undefined ? life : 12.0; // 在場上停留 12 秒
                 this.floatTime = Math.random() * Math.PI * 2;
             }
             update(deltaTime) {
@@ -414,7 +501,7 @@
 
         // --- 遊戲物件類別 ---
         class Player {
-            constructor(startX, colorTheme) {
+            constructor(startX, colorTheme, label) {
                 this.width = 44;
                 this.height = 54;
                 this.x = startX;
@@ -423,6 +510,7 @@
                 this.speed = this.baseSpeed; 
                 this.facingRight = true; 
                 this.colorTheme = colorTheme; 
+                this.label = label || '1P';
                 
                 this.isDashing = false;
                 this.dashTimer = 0;
@@ -432,6 +520,7 @@
                 this.ammo = this.maxAmmo;
                 this.showEmptyWarning = false;
                 this.drinkTextTimer = 0;
+                this.cementTextTimer = 0;
 
                 this.updateUpgrades(0);
             }
@@ -452,6 +541,7 @@
             update(deltaTime, inputX, inputY, isDashing) {
                 let oldX = this.x;
                 if (this.drinkTextTimer > 0) this.drinkTextTimer -= deltaTime;
+                if (this.cementTextTimer > 0) this.cementTextTimer -= deltaTime;
 
                 if (this.dashCooldown > 0) this.dashCooldown -= deltaTime;
                 if (isDashing && this.dashCooldown <= 0 && !this.isDashing) {
@@ -484,23 +574,34 @@
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 
+                // 玩家代號標示 (1P / 2P)
+                ctx.fillStyle = this.colorTheme.hat;
+                ctx.font = '900 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.label, 0, -this.height/2 - 26);
+
                 // 彈藥條
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
                 ctx.fillRect(-25, -this.height/2 - 22, 50, 8);
                 ctx.fillStyle = (this.ammo < this.maxAmmo * 0.3) ? '#EF4444' : '#10B981';
                 ctx.fillRect(-25, -this.height/2 - 22, 50 * (Math.max(0, this.ammo) / this.maxAmmo), 8);
 
-                // 喝水補滿提示 或 缺膠警告
-                if (this.drinkTextTimer > 0) {
+                // 道具提示 或 缺膠警告
+                if (this.cementTextTimer > 0) {
+                    ctx.fillStyle = '#FBBF24';
+                    ctx.font = '900 16px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🧱 水泥縮小全場破洞！', 0, -this.height/2 - 40);
+                } else if (this.drinkTextTimer > 0) {
                     ctx.fillStyle = '#38BDF8';
                     ctx.font = '900 16px sans-serif';
                     ctx.textAlign = 'center';
-                    ctx.fillText('⚡ 能量水補滿！', 0, -this.height/2 - 32);
+                    ctx.fillText('⚡ 能量水補滿！', 0, -this.height/2 - 40);
                 } else if (this.showEmptyWarning) {
                     ctx.fillStyle = '#EF4444';
                     ctx.font = '900 15px sans-serif';
                     ctx.textAlign = 'center';
-                    ctx.fillText('缺膠！快補料', 0, -this.height/2 - 30);
+                    ctx.fillText('缺膠！快補料', 0, -this.height/2 - 38);
                 }
 
                 ctx.strokeStyle = this.isDashing ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255, 255, 255, 0.2)';
@@ -554,20 +655,24 @@
         }
 
         class Hole {
-            constructor() {
-                this.x = Math.random() * (canvas.width - 140) + 70;
-                this.y = Math.random() * (canvas.height - 160) + 80; 
-                this.radius = 5;
+            constructor(x, y, radius, vertices) {
+                this.x = x !== undefined ? x : Math.random() * (canvas.width - 140) + 70;
+                this.y = y !== undefined ? y : Math.random() * (canvas.height - 160) + 80; 
+                this.radius = radius !== undefined ? radius : 5;
                 this.growthRate = baseGrowthRate + (score * 0.15); 
                 this.active = true;
                 this.flashTimer = 0;
                 
-                this.vertices = [];
-                let points = 6 + Math.floor(Math.random()*5);
-                for(let i=0; i<points; i++) {
-                    let angle = (i / points) * Math.PI * 2;
-                    let dist = 0.3 + Math.random() * 0.7; 
-                    this.vertices.push({angle, dist});
+                if (vertices) {
+                    this.vertices = vertices;
+                } else {
+                    this.vertices = [];
+                    let points = 6 + Math.floor(Math.random()*5);
+                    for(let i=0; i<points; i++) {
+                        let angle = (i / points) * Math.PI * 2;
+                        let dist = 0.3 + Math.random() * 0.7; 
+                        this.vertices.push({angle, dist});
+                    }
                 }
             }
 
@@ -670,7 +775,7 @@
             }
         }
 
-        let player = null;
+        let players = [];
 
         function spawnHoleManager(deltaTime) {
             holeSpawnTimer += deltaTime * 1000;
@@ -691,6 +796,16 @@
             }
         }
 
+        function spawnCementBagManager(deltaTime) {
+            cementBagSpawnTimer += deltaTime;
+            if (cementBagSpawnTimer > 16.0) { // 每 16 秒有機會在場上生成一包強力水泥
+                if (cementBags.length < 1) {
+                    cementBags.push(new CementBag());
+                }
+                cementBagSpawnTimer = 0;
+            }
+        }
+
         function drawWallBackground() {
             ctx.fillStyle = '#4B5563'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -706,11 +821,165 @@
             }
         }
 
-        // --- 遊戲流程控制 (單人模式) ---
-        window.initWallGame = function() {
+        // --- 網路雙人連線 (PeerJS WebRTC) 邏輯 ---
+        window.startSinglePlayer = function() {
+            if (peer) { peer.destroy(); peer = null; }
+            conn = null;
+            mpRole = 'NONE';
+            onlineBadge.classList.add('hidden');
+            window.initWallGame();
+        };
+
+        window.createOnlineRoom = function() {
+            if (peer) peer.destroy();
+            roomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            mpStatusText.classList.remove('hidden');
+            mpStatusText.innerText = '⏳ 正在建立房間...';
+            
+            peer = new Peer('wallpatcher-azhi-' + roomCode);
+            peer.on('open', () => {
+                mpRole = 'HOST';
+                mpStatusText.innerHTML = `✅ 房間已建立！請另一位玩家輸入房號：<span class="text-2xl text-white bg-blue-600 px-3 py-0.5 rounded ml-1 tracking-widest">${roomCode}</span> 即可自動開始！`;
+            });
+            peer.on('connection', (connection) => {
+                conn = connection;
+                conn.on('open', () => {
+                    onlineBadge.classList.remove('hidden');
+                    window.initWallGame();
+                });
+                conn.on('data', (data) => {
+                    if (data && data.type === 'INPUT') {
+                        clientInputData = data;
+                    } else if (data && data.type === 'RESTART') {
+                        window.initWallGame();
+                    }
+                });
+                conn.on('close', () => {
+                    onlineBadge.classList.add('hidden');
+                    mpRole = 'NONE';
+                });
+            });
+            peer.on('error', (err) => {
+                mpStatusText.innerText = '⚠️ 房號衝突或網路異常，請再點一次「建立房間」';
+            });
+        };
+
+        window.joinOnlineRoom = function() {
+            let code = roomCodeInput.value.trim();
+            if (code.length !== 4) {
+                mpStatusText.classList.remove('hidden');
+                mpStatusText.innerText = '⚠️ 請先在框框內輸入 4 位數字房號！';
+                return;
+            }
+            if (peer) peer.destroy();
+            mpStatusText.classList.remove('hidden');
+            mpStatusText.innerText = `⏳ 正在連線至房間 ${code}...`;
+
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect('wallpatcher-azhi-' + code);
+                conn.on('open', () => {
+                    mpRole = 'CLIENT';
+                    onlineBadge.classList.remove('hidden');
+                    window.initWallGame();
+                });
+                conn.on('data', (data) => {
+                    if (data && data.type === 'STATE') {
+                        applyNetworkState(data);
+                    } else if (data && data.type === 'RESTART') {
+                        window.initWallGame();
+                    }
+                });
+                conn.on('close', () => {
+                    onlineBadge.classList.add('hidden');
+                    mpRole = 'NONE';
+                });
+            });
+            peer.on('error', () => {
+                mpStatusText.innerText = '❌ 找不到該房間，請確認房號是否正確！';
+            });
+        };
+
+        // 2P 客戶端接收主機同步過來的畫面狀態 (自動依兩邊螢幕比例換算座標)
+        function applyNetworkState(s) {
+            if (gameState !== 'PLAYING' && s.gameState === 'PLAYING') {
+                window.initWallGame(true);
+            }
+            let rx = canvas.width / (s.w || canvas.width);
+            let ry = canvas.height / (s.h || canvas.height);
+
+            score = s.score;
+            scoreDisplay.innerText = score;
+            if (currentRank !== s.rank) {
+                currentRank = s.rank;
+                rankDisplay.innerText = currentRank < ranks.length ? ranks[currentRank] : ranks[ranks.length - 1];
+            }
+            floodLevel = s.flood;
+            levelUpTextTimer = s.lvlTimer;
+            cementEffectTimer = s.cemTimer;
+            screenFlashTimer = Math.max(screenFlashTimer, s.flashTimer);
+            shakeTime = Math.max(shakeTime, s.shake);
+
+            if (s.players && players.length === s.players.length) {
+                for (let i = 0; i < s.players.length; i++) {
+                    let sp = s.players[i];
+                    let p = players[i];
+                    p.x = sp.x * rx;
+                    p.y = sp.y * ry;
+                    p.facingRight = sp.fr;
+                    p.ammo = sp.ammo;
+                    p.maxAmmo = sp.maxAmmo;
+                    p.patchRange = sp.range * Math.min(rx, ry);
+                    p.isDashing = sp.dash;
+                    p.showEmptyWarning = sp.empty;
+                    p.drinkTextTimer = sp.drink;
+                    p.cementTextTimer = sp.cement;
+
+                    // 2P 端同步噴發泡棉粒子與水花特效
+                    if (sp.shooting && sp.tx !== null) {
+                        foamParticles.push(new FoamParticle(p.x, p.y, p.facingRight, sp.tx * rx, sp.ty * ry));
+                    }
+                }
+            }
+
+            holes = s.holes.map(h => {
+                let hole = new Hole(h.x * rx, h.y * ry, h.r, h.v);
+                hole.flashTimer = h.ft;
+                if (Math.random() < hole.radius * 0.05) {
+                    particles.push(new WaterParticle(hole.x, hole.y, hole.radius));
+                }
+                return hole;
+            });
+
+            waterBottles = s.bottles.map(b => new WaterBottle(b.x * rx, b.y * ry, b.l));
+            cementBags = s.cements.map(c => new CementBag(c.x * rx, c.y * ry, c.l));
+
+            if (s.gameState === 'GAMEOVER' && gameState !== 'GAMEOVER') {
+                gameOver(s.overMsg);
+            }
+        }
+
+        // --- 遊戲流程控制 (支援單人與網路雙人合作) ---
+        window.initWallGame = function(fromNetwork) {
+            if (!fromNetwork && mpRole === 'CLIENT' && conn && conn.open) {
+                conn.send({ type: 'RESTART' });
+                return;
+            }
+            if (!fromNetwork && mpRole === 'HOST' && conn && conn.open) {
+                conn.send({ type: 'RESTART' });
+            }
+
             resizeCanvas();
             
-            player = new Player(canvas.width / 2, { body: '#EA580C', stripe: '#EAB308', hat: '#EAB308' });
+            players = [];
+            if (mpRole === 'HOST' || mpRole === 'CLIENT') {
+                // 網路雙人模式：同時出現 1P 橘色工人與 2P 藍色工人
+                players.push(new Player(canvas.width / 2 - 70, { body: '#EA580C', stripe: '#EAB308', hat: '#EAB308' }, '1P 主機'));
+                players.push(new Player(canvas.width / 2 + 70, { body: '#2563EB', stripe: '#34D399', hat: '#38BDF8' }, '2P 隊友'));
+            } else {
+                // 單人模式
+                players.push(new Player(canvas.width / 2, { body: '#EA580C', stripe: '#EAB308', hat: '#EAB308' }, '1P'));
+            }
 
             score = 0;
             currentLevel = 0;
@@ -721,12 +990,15 @@
             particles = [];
             foamParticles = [];
             waterBottles = [];
+            cementBags = [];
             currentSpawnInterval = 2500;
             floodLevel = 0;
             shakeTime = 0;
             holeSpawnTimer = 0;
             waterBottleSpawnTimer = 0;
+            cementBagSpawnTimer = 0;
             levelUpTextTimer = 0;
+            cementEffectTimer = 0;
             screenFlashTimer = 0; 
             touchTarget.active = false;
             
@@ -743,7 +1015,7 @@
             animationFrameId = requestAnimationFrame(gameLoop);
         };
 
-        function gameOver() {
+        function gameOver(syncedMsg) {
             gameState = 'GAMEOVER';
             cancelAnimationFrame(animationFrameId);
             hud.classList.add('hidden');
@@ -753,6 +1025,11 @@
             let rankName = currentRank < ranks.length ? ranks[currentRank] : ranks[ranks.length - 1];
             finalRankDisplay.innerText = rankName;
             
+            if (syncedMsg) {
+                gameOverMessage.innerText = syncedMsg;
+                return;
+            }
+
             // 21種趣味結算評語
             const rankMessages = [
                 ["被罵到臭頭，明天不用來了。", "這技術...你是來幫忙淹水的嗎？", "老闆看著地下室，陷入了深深的沉思..."],
@@ -767,6 +1044,36 @@
             let msgGroup = rankMessages[Math.min(currentRank, rankMessages.length - 1)];
             let randomMsg = msgGroup[Math.floor(Math.random() * msgGroup.length)];
             gameOverMessage.innerText = randomMsg;
+        }
+
+        // 讀取本機玩家的操作輸入
+        function getLocalPlayerInput(refPlayer) {
+            let inputX = 0, inputY = 0;
+            if (keys.left) inputX -= 1;
+            if (keys.right) inputX += 1;
+            if (keys.up) inputY -= 1;
+            if (keys.down) inputY += 1;
+
+            if (touchTarget.active && refPlayer) {
+                let dx = touchTarget.x - refPlayer.x;
+                let dy = touchTarget.y - refPlayer.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > 10) { 
+                    inputX += dx / dist;
+                    inputY += dy / dist;
+                }
+            }
+            if (gamepadInput.x !== 0) inputX += gamepadInput.x;
+            if (gamepadInput.y !== 0) inputY += gamepadInput.y;
+
+            let length = Math.hypot(inputX, inputY);
+            if (length > 1) { inputX /= length; inputY /= length; }
+
+            let shoot = keys.shoot || touchInput.shoot || gamepadInput.shoot;
+            let dash = keys.dash || touchInput.dash || gamepadInput.dash;
+            touchInput.dash = false;
+
+            return { x: inputX, y: inputY, shoot, dash };
         }
 
         function gameLoop(timestamp) {
@@ -787,7 +1094,94 @@
             }
 
             drawWallBackground();
+
+            // --- 若為 2P 客戶端 (CLIENT)，傳送操作給 1P 主機並繪製同步畫面 ---
+            if (mpRole === 'CLIENT') {
+                let myPlayer = players[1] || players[0];
+                let localIn = getLocalPlayerInput(myPlayer);
+                if (conn && conn.open) {
+                    conn.send({
+                        type: 'INPUT',
+                        x: localIn.x,
+                        y: localIn.y,
+                        shoot: localIn.shoot,
+                        dash: localIn.dash
+                    });
+                }
+
+                for (let station of supplyStations) station.draw();
+                for (let b of waterBottles) { b.floatTime += deltaTime * 5; b.draw(); }
+                for (let c of cementBags) { c.floatTime += deltaTime * 4; c.draw(); }
+                for (let h of holes) h.draw();
+
+                if (touchTarget.active) {
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(touchTarget.x, touchTarget.y, 18, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].update(deltaTime);
+                    particles[i].draw();
+                    if (particles[i].life <= 0) particles.splice(i, 1);
+                }
+                for (let i = foamParticles.length - 1; i >= 0; i--) {
+                    foamParticles[i].update(deltaTime);
+                    foamParticles[i].draw();
+                    if (foamParticles[i].life <= 0) foamParticles.splice(i, 1);
+                }
+                for (let p of players) p.draw();
+
+                if (cementEffectTimer > 0) {
+                    ctx.save();
+                    ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(1, cementEffectTimer * 1.5)})`; 
+                    ctx.font = '900 26px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 15;
+                    ctx.fillText('🧱 強力水泥發動！全場破洞縮回初始大小！', canvas.width / 2, canvas.height / 2 - 120);
+                    ctx.restore();
+                }
+                if (levelUpTextTimer > 0) {
+                    ctx.save();
+                    ctx.fillStyle = `rgba(52, 211, 153, ${Math.min(1, levelUpTextTimer * 1.5)})`; 
+                    ctx.font = '900 28px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 15;
+                    ctx.fillText('🔺 升級！彈匣擴充與全場清空！', canvas.width / 2, canvas.height / 2 - 80);
+                    ctx.restore();
+                }
+
+                let waterH = canvas.height * (floodLevel / 100);
+                ctx.fillStyle = 'rgba(29, 78, 216, 0.5)'; 
+                ctx.fillRect(0, canvas.height - waterH, canvas.width, waterH);
+                ctx.restore();
+
+                if (screenFlashTimer > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${screenFlashTimer * 2})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    screenFlashTimer -= deltaTime;
+                }
+
+                floodBar.style.width = Math.min(floodLevel, 100) + '%';
+                if (floodLevel > 80) {
+                    floodBar.classList.replace('bg-blue-500', 'bg-red-500');
+                    dangerWarning.classList.remove('hidden');
+                } else {
+                    floodBar.classList.replace('bg-red-500', 'bg-blue-500');
+                    dangerWarning.classList.add('hidden');
+                }
+
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
+            }
             
+            // --- 以下為單人模式 或 1P 主機 (HOST) 權威運算 ---
             for (let station of supplyStations) {
                 station.draw();
             }
@@ -798,6 +1192,15 @@
                 waterBottles[i].draw();
                 if (waterBottles[i].life <= 0) {
                     waterBottles.splice(i, 1);
+                }
+            }
+
+            spawnCementBagManager(deltaTime);
+            for (let i = cementBags.length - 1; i >= 0; i--) {
+                cementBags[i].update(deltaTime);
+                cementBags[i].draw();
+                if (cementBags[i].life <= 0) {
+                    cementBags.splice(i, 1);
                 }
             }
 
@@ -813,63 +1216,63 @@
                 ctx.restore();
             }
 
-            if (player) {
-                let inputX = 0, inputY = 0;
+            // 更新所有場上工人 (單人 1 位，連線雙人 2 位)
+            for (let pIdx = 0; pIdx < players.length; pIdx++) {
+                let p = players[pIdx];
+                let pIn = (pIdx === 0) ? getLocalPlayerInput(p) : clientInputData;
 
-                if (keys.left) inputX -= 1;
-                if (keys.right) inputX += 1;
-                if (keys.up) inputY -= 1;
-                if (keys.down) inputY += 1;
+                p.update(deltaTime, pIn.x, pIn.y, pIn.dash);
+                if (pIdx === 1) clientInputData.dash = false;
 
-                if (touchTarget.active) {
-                    let dx = touchTarget.x - player.x;
-                    let dy = touchTarget.y - player.y;
-                    let dist = Math.hypot(dx, dy);
-                    if (dist > 10) { 
-                        inputX += dx / dist;
-                        inputY += dy / dist;
-                    }
-                }
-                
-                if (gamepadInput.x !== 0) inputX += gamepadInput.x;
-                if (gamepadInput.y !== 0) inputY += gamepadInput.y;
-                
-                let length = Math.hypot(inputX, inputY);
-                if (length > 1) { inputX /= length; inputY /= length; }
-
-                let isShootingInput = keys.shoot || touchInput.shoot || gamepadInput.shoot;
-                let isDashing = keys.dash || touchInput.dash || gamepadInput.dash;
-                touchInput.dash = false; 
-
-                player.update(deltaTime, inputX, inputY, isDashing);
-                
+                // 檢查靠近 3 處補料桶
                 for (let station of supplyStations) {
-                    let distToBucket = Math.hypot(player.x - station.x, player.y - station.y);
+                    let distToBucket = Math.hypot(p.x - station.x, p.y - station.y);
                     if (distToBucket < 85) {
-                        player.ammo = Math.min(player.maxAmmo, player.ammo + 130 * deltaTime);
+                        p.ammo = Math.min(p.maxAmmo, p.ammo + 130 * deltaTime);
                         station.isRefilling = true;
                     }
                 }
 
+                // 檢查拾取能量水瓶 (補滿材料)
                 for (let b = waterBottles.length - 1; b >= 0; b--) {
                     let bottle = waterBottles[b];
-                    if (Math.hypot(player.x - bottle.x, player.y - bottle.y) < 52) {
-                        player.ammo = player.maxAmmo;
-                        player.drinkTextTimer = 1.5;
+                    if (Math.hypot(p.x - bottle.x, p.y - bottle.y) < 52) {
+                        p.ammo = p.maxAmmo;
+                        p.drinkTextTimer = 1.5;
                         waterBottles.splice(b, 1);
                     }
                 }
 
-                let actuallyShooting = isShootingInput && player.ammo > 0;
-                player.showEmptyWarning = isShootingInput && player.ammo <= 0;
+                // 檢查拾取強力水泥包 (全場破洞縮小回最小初始半徑 5)
+                for (let c = cementBags.length - 1; c >= 0; c--) {
+                    let bag = cementBags[c];
+                    if (Math.hypot(p.x - bag.x, p.y - bag.y) < 55) {
+                        for (let h of holes) {
+                            h.radius = 5; // 所有洞回復到最小的初始狀態！
+                            h.flashTimer = 0.4;
+                        }
+                        floodLevel = Math.max(0, floodLevel - 12);
+                        p.cementTextTimer = 2.0;
+                        cementEffectTimer = 2.2;
+                        screenFlashTimer = 0.35;
+                        shakeTime = 0.35;
+                        cementBags.splice(c, 1);
+                    }
+                }
+
+                let actuallyShooting = pIn.shoot && p.ammo > 0;
+                p.showEmptyWarning = pIn.shoot && p.ammo <= 0;
+                p._netShooting = actuallyShooting;
+                p._netTx = null;
+                p._netTy = null;
 
                 if (actuallyShooting) {
-                    player.ammo -= 35 * deltaTime;
+                    p.ammo -= 35 * deltaTime;
                     
                     let closest = null;
-                    let minDist = player.patchRange;
+                    let minDist = p.patchRange;
                     for (let h of holes) {
-                        let dist = Math.hypot(h.x - player.x, h.y - player.y);
+                        let dist = Math.hypot(h.x - p.x, h.y - p.y);
                         if (dist < minDist) {
                             minDist = dist;
                             closest = h;
@@ -877,8 +1280,10 @@
                     }
 
                     if (closest) {
-                        foamParticles.push(new FoamParticle(player.x, player.y, player.facingRight, closest.x, closest.y));
-                        closest.radius -= player.patchPower * deltaTime;
+                        p._netTx = closest.x;
+                        p._netTy = closest.y;
+                        foamParticles.push(new FoamParticle(p.x, p.y, p.facingRight, closest.x, closest.y));
+                        closest.radius -= p.patchPower * deltaTime;
                         closest.flashTimer = 0.08; 
                         
                         if (closest.radius <= 0) {
@@ -891,7 +1296,7 @@
                             
                             if (newLevel > currentLevel) {
                                 currentLevel = newLevel;
-                                player.updateUpgrades(currentLevel);
+                                for (let allP of players) allP.updateUpgrades(currentLevel);
                                 
                                 if (newRank > currentRank) {
                                     currentRank = newRank;
@@ -905,7 +1310,7 @@
                                 
                                 for (let h of holes) {
                                     for(let k=0; k<3; k++) {
-                                        foamParticles.push(new FoamParticle(player.x, player.y, player.facingRight, h.x, h.y));
+                                        foamParticles.push(new FoamParticle(p.x, p.y, p.facingRight, h.x, h.y));
                                     }
                                     h.active = false; 
                                 }
@@ -919,8 +1324,10 @@
                             }
                         }
                     } else {
-                        let dummyTargetX = player.facingRight ? player.x + 100 : player.x - 100;
-                        foamParticles.push(new FoamParticle(player.x, player.y, player.facingRight, dummyTargetX, player.y));
+                        let dummyTargetX = p.facingRight ? p.x + 100 : p.x - 100;
+                        p._netTx = dummyTargetX;
+                        p._netTy = p.y;
+                        foamParticles.push(new FoamParticle(p.x, p.y, p.facingRight, dummyTargetX, p.y));
                     }
                 }
             }
@@ -947,7 +1354,20 @@
                 if (foamParticles[i].life <= 0) foamParticles.splice(i, 1);
             }
 
-            if (player) player.draw();
+            for (let p of players) p.draw();
+
+            if (cementEffectTimer > 0) {
+                ctx.save();
+                ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(1, cementEffectTimer * 1.5)})`; 
+                ctx.font = '900 26px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 15;
+                let floatY = (canvas.height / 2 - 120) - (2.2 - cementEffectTimer) * 15;
+                ctx.fillText('🧱 強力水泥發動！全場破洞縮回初始大小！', canvas.width / 2, floatY);
+                ctx.restore();
+                cementEffectTimer -= deltaTime;
+            }
 
             if (levelUpTextTimer > 0) {
                 ctx.save();
@@ -986,9 +1406,66 @@
                 dangerWarning.classList.add('hidden');
             }
 
-            if (floodLevel >= 100) {
+            let isOver = floodLevel >= 100;
+            if (isOver) {
                 gameOver();
-            } else {
+            }
+
+            // 若為 1P 主機 (HOST)，即時打包狀態同步給 2P 隊友
+            if (mpRole === 'HOST' && conn && conn.open) {
+                netSyncTimer += deltaTime;
+                if (netSyncTimer >= 0.03 || isOver) { // 每秒同步約 30 次，流暢不卡頓
+                    netSyncTimer = 0;
+                    conn.send({
+                        type: 'STATE',
+                        gameState: isOver ? 'GAMEOVER' : 'PLAYING',
+                        overMsg: isOver ? gameOverMessage.innerText : '',
+                        w: canvas.width,
+                        h: canvas.height,
+                        score: score,
+                        rank: currentRank,
+                        flood: floodLevel,
+                        lvlTimer: levelUpTextTimer,
+                        cemTimer: cementEffectTimer,
+                        flashTimer: screenFlashTimer,
+                        shake: shakeTime,
+                        players: players.map(p => ({
+                            x: Math.round(p.x),
+                            y: Math.round(p.y),
+                            fr: p.facingRight,
+                            ammo: Math.round(p.ammo),
+                            maxAmmo: p.maxAmmo,
+                            range: Math.round(p.patchRange),
+                            dash: p.isDashing,
+                            empty: p.showEmptyWarning,
+                            drink: p.drinkTextTimer,
+                            cement: p.cementTextTimer,
+                            shooting: p._netShooting,
+                            tx: p._netTx ? Math.round(p._netTx) : null,
+                            ty: p._netTy ? Math.round(p._netTy) : null
+                        })),
+                        holes: holes.map(h => ({
+                            x: Math.round(h.x),
+                            y: Math.round(h.y),
+                            r: Number(h.radius.toFixed(1)),
+                            v: h.vertices,
+                            ft: h.flashTimer
+                        })),
+                        bottles: waterBottles.map(b => ({
+                            x: Math.round(b.x),
+                            y: Math.round(b.y),
+                            l: Number(b.life.toFixed(1))
+                        })),
+                        cements: cementBags.map(c => ({
+                            x: Math.round(c.x),
+                            y: Math.round(c.y),
+                            l: Number(c.life.toFixed(1))
+                        }))
+                    });
+                }
+            }
+
+            if (!isOver) {
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
         }
