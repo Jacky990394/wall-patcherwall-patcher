@@ -59,7 +59,7 @@
     <div id="startScreen" class="absolute inset-0 flex items-center justify-center z-20 bg-gray-900/95 backdrop-blur-sm p-4 box-border">
         <div class="bg-gray-800 border-2 border-yellow-500 p-5 md:p-7 rounded-xl shadow-2xl text-center max-w-lg w-full max-h-full overflow-y-auto box-border">
             <h1 class="text-3xl md:text-5xl font-black text-yellow-500 mb-1 tracking-wider">補漏水工人</h1>
-            <p class="text-gray-400 mb-3 font-bold text-xs md:text-sm">Wall Patcher Online</p>
+            <p class="text-emerald-400 mb-3 font-black text-xs md:text-sm">⚡ Wall Patcher Online (雲端極速版 v3.0)</p>
             
             <div class="text-xs md:text-sm text-gray-300 mb-4 space-y-1.5 text-left w-full leading-relaxed bg-gray-900 p-3.5 rounded-lg box-border">
                 <p>🛠️ 牆壁正在漏水！裂縫會隨時間越來越大！</p>
@@ -821,18 +821,66 @@
             }
         }
 
-        // --- 網路雙人連線 (MQTT 雲端高速轉發，100% 不怕防火牆阻擋) ---
+        // --- 網路雙人連線 (三路雲端伺服器併發轉發，100% 穿透防火牆) ---
+        let mqttClients = [];
+        const BROKER_URLS = [
+            'wss://broker.emqx.io:8084/mqtt',
+            'wss://broker.hivemq.com:8884/mqtt',
+            'wss://test.mosquitto.org:8081/mqtt'
+        ];
+
         function cleanupNetwork() {
-            if (mqttClient) {
-                try { mqttClient.end(true); } catch(e) {}
-                mqttClient = null;
+            for (let c of mqttClients) {
+                try { c.end(true); } catch(e) {}
             }
+            mqttClients = [];
         }
 
         function sendNetMsg(obj) {
-            if (mqttClient && mqttClient.connected && roomTopic) {
-                mqttClient.publish(roomTopic, JSON.stringify(obj));
+            const payload = JSON.stringify(obj);
+            for (let c of mqttClients) {
+                if (c && c.connected && roomTopic) {
+                    try { c.publish(roomTopic, payload); } catch(e) {}
+                }
             }
+        }
+
+        function connectMultiBrokers(onConnectedCallback, onMessageCallback) {
+            cleanupNetwork();
+            let hasTriggeredConnect = false;
+            let processedMsgIds = new Set();
+
+            BROKER_URLS.forEach((url) => {
+                try {
+                    const client = mqtt.connect(url, { connectTimeout: 5000, reconnectPeriod: 2000 });
+                    mqttClients.push(client);
+
+                    client.on('connect', () => {
+                        client.subscribe(roomTopic, () => {
+                            if (!hasTriggeredConnect) {
+                                hasTriggeredConnect = true;
+                                onConnectedCallback();
+                            }
+                        });
+                    });
+
+                    client.on('message', (topic, message) => {
+                        try {
+                            const data = JSON.parse(message.toString());
+                            // 防止多伺服器重複執行同一個一次性指令
+                            if (data.msgId) {
+                                if (processedMsgIds.has(data.msgId)) return;
+                                processedMsgIds.add(data.msgId);
+                                if (processedMsgIds.size > 200) {
+                                    const first = processedMsgIds.values().next().value;
+                                    processedMsgIds.delete(first);
+                                }
+                            }
+                            onMessageCallback(data);
+                        } catch(e) {}
+                    });
+                } catch(err) {}
+            });
         }
 
         window.startSinglePlayer = function() {
@@ -840,6 +888,111 @@
             mpRole = 'NONE';
             onlineBadge.classList.add('hidden');
             window.initWallGame();
+        };
+
+        window.forceStartOnline = function() {
+            onlineBadge.classList.remove('hidden');
+            sendNetMsg({ type: 'START_GAME', msgId: Date.now() + Math.random() });
+            if (gameState !== 'PLAYING') {
+                window.initWallGame(true);
+            }
+        };
+
+        window.createOnlineRoom = function() {
+            roomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            roomTopic = 'wallpatcher/azhi2026_v3/room/' + roomCode;
+            mpRole = 'HOST';
+            
+            mpStatusText.classList.remove('hidden');
+            mpStatusText.innerHTML = '⏳ 正在連接三路雲端大廳...';
+            
+            connectMultiBrokers(
+                () => {
+                    mpStatusText.innerHTML = `
+                        <div class="bg-blue-950/90 border border-blue-400 p-2.5 rounded-lg mt-1 text-center">
+                            <div>✅ 雲端房間已開啟！請另一台手機/電腦輸入房號：</div>
+                            <div class="my-1.5"><span class="text-2xl text-yellow-300 font-black bg-black px-4 py-1 rounded tracking-widest border border-yellow-500">${roomCode}</span></div>
+                            <div class="text-xs text-gray-300 mb-2">對方按下「加入(2P)」即會自動進場，或你也可以：</div>
+                            <button onclick="window.forceStartOnline()" class="bg-amber-500 hover:bg-amber-400 text-black font-black py-1.5 px-4 rounded text-xs cursor-pointer shadow">
+                                🚀 直接先進場邊玩邊等 (對方隨時可連入)
+                            </button>
+                        </div>`;
+                },
+                (data) => {
+                    if (mpRole === 'HOST') {
+                        if (data.type === 'JOIN') {
+                            sendNetMsg({ type: 'START_GAME', msgId: Date.now() + Math.random() });
+                            onlineBadge.classList.remove('hidden');
+                            if (gameState !== 'PLAYING') {
+                                window.initWallGame(true);
+                            }
+                        } else if (data.type === 'INPUT') {
+                            clientInputData = data;
+                        } else if (data.type === 'RESTART') {
+                            window.initWallGame();
+                        }
+                    }
+                }
+            );
+        };
+
+        window.joinOnlineRoom = function() {
+            let code = roomCodeInput.value.trim();
+            if (code.length !== 4) {
+                mpStatusText.classList.remove('hidden');
+                mpStatusText.innerText = '⚠️ 請先在框框內輸入 4 位數字房號！';
+                return;
+            }
+            if (mpRole === 'HOST' && code === roomCode) {
+                mpStatusText.classList.remove('hidden');
+                mpStatusText.innerHTML = `<span class="text-red-400">⚠️ 你已經是【${roomCode}】的 1P 主機了！請用『另一支手機或開新分頁』輸入 ${roomCode} 來加入喔！</span>`;
+                return;
+            }
+
+            roomCode = code;
+            roomTopic = 'wallpatcher/azhi2026_v3/room/' + roomCode;
+            mpRole = 'CLIENT';
+
+            mpStatusText.classList.remove('hidden');
+            mpStatusText.innerHTML = `⏳ 正在連線至房間 <b>${code}</b>...`;
+
+            let joinRetryInterval = null;
+
+            connectMultiBrokers(
+                () => {
+                    sendNetMsg({ type: 'JOIN', msgId: Date.now() + Math.random() });
+                    mpStatusText.innerHTML = `
+                        <div class="text-center">
+                            <div>📡 已送出連線訊號至房間 <b>${code}</b>！等待 1P 主機回應...</div>
+                            <button onclick="window.forceStartOnline()" class="mt-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black py-1.5 px-4 rounded text-xs cursor-pointer shadow">
+                                🚀 若主機已進場，點此直接切入畫面
+                            </button>
+                        </div>`;
+                    joinRetryInterval = setInterval(() => {
+                        if (gameState !== 'PLAYING' && mpRole === 'CLIENT') {
+                            sendNetMsg({ type: 'JOIN', msgId: Date.now() + Math.random() });
+                        } else {
+                            clearInterval(joinRetryInterval);
+                        }
+                    }, 700);
+                },
+                (data) => {
+                    if (mpRole === 'CLIENT') {
+                        if (data.type === 'START_GAME' || data.type === 'STATE') {
+                            if (joinRetryInterval) clearInterval(joinRetryInterval);
+                            onlineBadge.classList.remove('hidden');
+                            if (gameState !== 'PLAYING' && data.gameState !== 'GAMEOVER') {
+                                window.initWallGame(true);
+                            }
+                            if (data.type === 'STATE') {
+                                applyNetworkState(data);
+                            }
+                        } else if (data.type === 'RESTART') {
+                            window.initWallGame(true);
+                        }
+                    }
+                }
+            );
         };
 
         window.createOnlineRoom = function() {
@@ -1010,12 +1163,12 @@
 
         // --- 遊戲流程控制 (支援單人與網路雙人合作) ---
         window.initWallGame = function(fromNetwork) {
-            if (!fromNetwork && mpRole === 'CLIENT' && mqttClient && mqttClient.connected) {
-                sendNetMsg({ type: 'RESTART' });
+            if (!fromNetwork && mpRole === 'CLIENT' && mqttClients.some(c => c.connected)) {
+                sendNetMsg({ type: 'RESTART', msgId: Date.now() + Math.random() });
                 return;
             }
-            if (!fromNetwork && mpRole === 'HOST' && mqttClient && mqttClient.connected) {
-                sendNetMsg({ type: 'RESTART' });
+            if (!fromNetwork && mpRole === 'HOST' && mqttClients.some(c => c.connected)) {
+                sendNetMsg({ type: 'RESTART', msgId: Date.now() + Math.random() });
             }
 
             resizeCanvas();
@@ -1463,7 +1616,7 @@
             }
 
             // 若為 1P 主機 (HOST)，即時打包狀態同步給 2P 隊友
-            if (mpRole === 'HOST' && mqttClient && mqttClient.connected) {
+            if (mpRole === 'HOST' && mqttClients.some(c => c.connected)) {
                 netSyncTimer += deltaTime;
                 if (netSyncTimer >= 0.045 || isOver) { // 每秒同步約 22 次，高速穩定
                     netSyncTimer = 0;
