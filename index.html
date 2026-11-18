@@ -59,7 +59,7 @@
     <div id="startScreen" class="absolute inset-0 flex items-center justify-center z-20 bg-gray-900/95 backdrop-blur-sm p-4 box-border">
         <div class="bg-gray-800 border-2 border-yellow-500 p-5 md:p-7 rounded-xl shadow-2xl text-center max-w-lg w-full max-h-full overflow-y-auto box-border">
             <h1 class="text-3xl md:text-5xl font-black text-yellow-500 mb-1 tracking-wider">補漏水工人</h1>
-            <p class="text-emerald-400 mb-3 font-black text-xs md:text-sm">⚡ Wall Patcher Online (雲端極速版 v3.0)</p>
+            <p class="text-emerald-400 mb-3 font-black text-xs md:text-sm">⚡ Wall Patcher Online (三路雲端極速版 v3.5)</p>
             
             <div class="text-xs md:text-sm text-gray-300 mb-4 space-y-1.5 text-left w-full leading-relaxed bg-gray-900 p-3.5 rounded-lg box-border">
                 <p>🛠️ 牆壁正在漏水！裂縫會隨時間越來越大！</p>
@@ -993,113 +993,6 @@
                     }
                 }
             );
-        };
-
-        window.createOnlineRoom = function() {
-            cleanupNetwork();
-            roomCode = Math.floor(1000 + Math.random() * 9000).toString();
-            roomTopic = 'wallpatcher/azhi2026/room/' + roomCode;
-            mpRole = 'HOST';
-            
-            mpStatusText.classList.remove('hidden');
-            mpStatusText.innerHTML = '⏳ 正在連接雲端大廳...';
-            
-            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-            
-            mqttClient.on('connect', () => {
-                mqttClient.subscribe(roomTopic, () => {
-                    mpStatusText.innerHTML = `
-                        <div class="bg-blue-950/90 border border-blue-400 p-2.5 rounded-lg mt-1">
-                            ✅ 房間已開啟！請『另一台手機/電腦』輸入房號：
-                            <span class="text-2xl text-yellow-300 font-black bg-black px-3 py-0.5 rounded mx-1 tracking-widest">${roomCode}</span>
-                            <div class="text-xs text-gray-300 mt-1">⚠️ 注意：這台主機請保持在此畫面等待，不要自己在上面按加入喔！</div>
-                        </div>`;
-                });
-            });
-
-            mqttClient.on('message', (topic, message) => {
-                try {
-                    const data = JSON.parse(message.toString());
-                    if (mpRole === 'HOST') {
-                        if (data.type === 'JOIN') {
-                            // 收到 2P 加入訊號，通知 2P 並立即開始遊戲
-                            sendNetMsg({ type: 'START_GAME' });
-                            onlineBadge.classList.remove('hidden');
-                            if (gameState !== 'PLAYING') {
-                                window.initWallGame(true);
-                            }
-                        } else if (data.type === 'INPUT') {
-                            clientInputData = data;
-                        } else if (data.type === 'RESTART') {
-                            window.initWallGame();
-                        }
-                    }
-                } catch(e) {}
-            });
-
-            mqttClient.on('error', () => {
-                mpStatusText.innerText = '⚠️ 網路連線異常，請重試';
-            });
-        };
-
-        window.joinOnlineRoom = function() {
-            let code = roomCodeInput.value.trim();
-            if (code.length !== 4) {
-                mpStatusText.classList.remove('hidden');
-                mpStatusText.innerText = '⚠️ 請先在框框內輸入 4 位數字房號！';
-                return;
-            }
-            if (mpRole === 'HOST' && code === roomCode) {
-                mpStatusText.classList.remove('hidden');
-                mpStatusText.innerHTML = `<span class="text-red-400">⚠️ 你已經是【${roomCode}】的 1P 主機了！請用『另一支手機或開新分頁』輸入 ${roomCode} 來加入喔！</span>`;
-                return;
-            }
-
-            cleanupNetwork();
-            roomCode = code;
-            roomTopic = 'wallpatcher/azhi2026/room/' + roomCode;
-            mpRole = 'CLIENT';
-
-            mpStatusText.classList.remove('hidden');
-            mpStatusText.innerText = `⏳ 正在連線至房間 ${code}...`;
-
-            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-
-            let joinRetryInterval = null;
-
-            mqttClient.on('connect', () => {
-                mqttClient.subscribe(roomTopic, () => {
-                    // 持續發送加入請求，確保主機一定收到
-                    sendNetMsg({ type: 'JOIN' });
-                    joinRetryInterval = setInterval(() => {
-                        if (gameState !== 'PLAYING' && mpRole === 'CLIENT') {
-                            sendNetMsg({ type: 'JOIN' });
-                        } else {
-                            clearInterval(joinRetryInterval);
-                        }
-                    }, 800);
-                });
-            });
-
-            mqttClient.on('message', (topic, message) => {
-                try {
-                    const data = JSON.parse(message.toString());
-                    if (mpRole === 'CLIENT') {
-                        if (data.type === 'START_GAME' || data.type === 'STATE') {
-                            if (joinRetryInterval) clearInterval(joinRetryInterval);
-                            onlineBadge.classList.remove('hidden');
-                            if (gameState !== 'PLAYING' && data.gameState !== 'GAMEOVER') {
-                                window.initWallGame(true);
-                            }
-                            if (data.type === 'STATE') {
-                                applyNetworkState(data);
-                            }
-                        } else if (data.type === 'RESTART') {
-                            window.initWallGame(true);
-                        }
-                    }
-                } catch(e) {}
-            });
         };
 
         // 2P 客戶端接收主機同步過來的畫面狀態 (自動依兩邊螢幕比例換算座標)
